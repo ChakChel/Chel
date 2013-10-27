@@ -1,5 +1,9 @@
-#!/usr/bin/python3
+#!/usr/bin/python
 
+from __future__ import (absolute_import, division,
+                        print_function, unicode_literals)
+from future import standard_library
+from future.builtins import *
 import subprocess as sp
 import re
 
@@ -19,27 +23,27 @@ supported commands\
 
 INVITE = "boost:~# "
 
-ipRegex = re.compile(r"^(((25[0-5]|2[0-4][0-9]|[10]?[0-9]{1,2})[.]){3}\
-(25[0-5]|2[0-4][0-9]|[10]?[0-9]{1,2})|(([0-9a-f]{0,2}:){5}[0-9a-f]{0,2}))$")
+ipRegex = re.compile(r"^((((25[0-5]|2[0-4][0-9]|[10]?[0-9]{1,2})[.]){3}"
+"(25[0-5]|2[0-4][0-9]|[10]?[0-9]{1,2}))|(([0-9a-f]{0,2}:){5}[0-9a-f]{0,2}))$")
 
 class Commande:
     def __init__(self, action, desc):
         self.action = action
         self.desc = desc
 
-    def action(self, arg):
+    def action(self, args):
         return ""
 
     def getDesc(self):
         return self.desc
 
-def cmdHelp(arg):
+def cmdHelp(args):
     lines = []
     for cmd in cmdDict.keys():
         lines.append("{}\t{}".format(cmd, cmdDict[cmd].getDesc()))
     return "\n".join(lines)
 
-def cmdEth(arg):
+def cmdEth(args):
     proc = sp.Popen(["/bin/touch", "-A"],
                     stdin=sp.PIPE,
                     stdout=sp.PIPE,
@@ -50,7 +54,7 @@ def cmdEth(arg):
     
     return "Ethernet Mode is running"
 
-def cmdWifi(arg):
+def cmdWifi(args):
     proc = sp.Popen(["/bin/touch", "-A"],
                     stdin=sp.PIPE,
                     stdout=sp.PIPE,
@@ -61,12 +65,12 @@ def cmdWifi(arg):
     
     return "WiFi Mode is running"
 
-def cmdIp(arg):
+def cmdIp(args):
     
-    if arg is None or not re.match(ipRegex, arg):
+    if (len(args) < 2) or (not re.match(ipRegex, args[1])):
         return "Error: Failed value"
     
-    proc = sp.Popen(["/sbin/ifconfig", "eth0", arg],
+    proc = sp.Popen(["/sbin/ifconfig", "eth0", args[1]],
                     stdin=sp.PIPE,
                     stdout=sp.PIPE,
                     stderr=sp.STDOUT)
@@ -76,12 +80,12 @@ def cmdIp(arg):
     
     return "IP address value is updated"
 
-def cmdNetmask(arg):
+def cmdNetmask(args):
     
-    if arg is None or not re.match(ipRegex, arg):
+    if len(args) < 2 or not re.match(ipRegex, args[1]):
         return "Error: Failed value"
 
-    proc = sp.Popen(["/sbin/ifconfig", "eth0", "netmask", arg],
+    proc = sp.Popen(["/sbin/ifconfig", "eth0", "netmask", args[1]],
                     stdin=sp.PIPE,
                     stdout=sp.PIPE,
                     stderr=sp.STDOUT)
@@ -91,10 +95,10 @@ def cmdNetmask(arg):
 
     return "Netmask value is updated"
 
-def cmdConfig(arg):
+def cmdConfig(args):
     return ""
 
-def cmdList(arg):
+def cmdList(args):
     return ""
 
 if __name__ == "__main__":
@@ -111,8 +115,7 @@ if __name__ == "__main__":
                                 "Update netmask value for Ethernet Mode")}
     while 1:
         cmd = input(INVITE).split(" ")
-        cmd = tuple(s.lower() for s in cmd) + (None,)
         if cmd[0] in cmdDict.keys():
-            print(cmdDict[cmd[0]].action(cmd[1]))
+            print(cmdDict[cmd[0]].action(cmd))
         else:
             print("Error: Enter help to know the supported commands")
