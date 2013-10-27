@@ -6,6 +6,7 @@ from future import standard_library
 from future.builtins import *
 import subprocess as sp
 import re
+import mmap
 
 ENTETE = """\
  ****** * * ******* ******     ***    ******    **    ****** ***   ***
@@ -37,33 +38,8 @@ class Commande:
     def getDesc(self):
         return self.desc
 
-def cmdHelp(args):
-    lines = []
-    for cmd in cmdDict.keys():
-        lines.append("{}\t{}".format(cmd, cmdDict[cmd].getDesc()))
-    return "\n".join(lines)
-
-def cmdEth(args):
-    proc = sp.Popen(["/bin/touch", "-A"],
-                    stdin=sp.PIPE,
-                    stdout=sp.PIPE,
-                    stderr=sp.STDOUT)
-
-    if proc.wait():
-        return "Error: Failed to enter Ethernet Mode"
-    
-    return "Ethernet Mode is running"
-
-def cmdWifi(args):
-    proc = sp.Popen(["/bin/touch", "-A"],
-                    stdin=sp.PIPE,
-                    stdout=sp.PIPE,
-                    stderr=sp.STDOUT)
-
-    if proc.wait():
-        return "Error: Failed to enter WiFi Mode"
-    
-    return "WiFi Mode is running"
+def cmdConfig(args):
+    return "Not yet implemented"
 
 def cmdIp(args):
     
@@ -80,6 +56,15 @@ def cmdIp(args):
     
     return "IP address value is updated"
 
+def cmdHelp(args):
+    lines = []
+    for cmd in cmdDict.keys():
+        lines.append("{}\t{}".format(cmd, cmdDict[cmd].getDesc()))
+    return "\n".join(lines)
+
+def cmdList(args):
+    return "Not yet implemented"
+
 def cmdNetmask(args):
     
     if len(args) < 2 or not re.match(ipRegex, args[1]):
@@ -95,20 +80,27 @@ def cmdNetmask(args):
 
     return "Netmask value is updated"
 
-def cmdConfig(args):
-    return ""
+def cmdPasswd(args):
+    return "Not yet implemented"
 
-def cmdList(args):
-    return ""
+def cmdWifi(args):
+#    command = ["/sbin/iwconfig", "wlan0", "mode", "Ad-Hoc", "essid", "Chel"]
+    proc = sp.Popen(["/sbin/ifconfig", "wlan0"],
+                    stdin=sp.PIPE,
+                    stdout=sp.PIPE,
+                    stderr=sp.STDOUT)
+
+    if proc.wait():
+        return "Error: Failed to enter WiFi Mode"
+    
+    return "WiFi is enabled"
 
 if __name__ == "__main__":
     print(ENTETE)
     cmdDict = {"help": Commande(cmdHelp,
                                 "Print supported commands"),
-               "eth": Commande(cmdEth,
-                               "Start Ethernet Mode and stop WiFi Mode"),
                "wifi": Commande(cmdWifi,
-                                "Start WiFi Mode and stop Ethernet Mode"),
+                                "Start/Stop WiFi access point"),
                "ip": Commande(cmdIp,
                                 "Update IP address value for Ethernet Mode"),
                "netmask": Commande(cmdNetmask,
