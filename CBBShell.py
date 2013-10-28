@@ -19,6 +19,7 @@ from future.builtins import *
 import subprocess as sp
 import re
 import mmap
+import sys
 
 # CONSTANTES ###################################################################
 
@@ -116,13 +117,12 @@ def cmdIp(args):
 
     return "IP address value is updated"
 
-# TODO !!!
 def cmdList(args):
     listStr = "Boost\tCons\tVi\tIi\tPi\tVo\tIo\n"
     mmvf.seek(0)
     while 1:
         line = mmvf.readline()
-        if line[0] in (35, 10):
+        if (sys.version < "3" and line[0] in "#\n") or line[0] in (35, 10):
             break
         listStr += line.decode("utf-8")
     return listStr[:-1]
