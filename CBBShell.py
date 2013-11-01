@@ -4,8 +4,8 @@
 """
 @file    CBBShell.py
 @author  PERROCHAUD Clément
-@version 1.1
-@date    2013-10-28
+@version 1.2
+@date    2013-11-01
 
 Shell de configuration du superviseur.
 """
@@ -23,21 +23,9 @@ import sys
 
 # CONSTANTES ###################################################################
 
-ENTETE = """\
- ****** * * ******* ******     ***    ******    **    ****** ***   ***
-*  **** * * *** *** * *** *   *   *  *  ****   *  *   * **** *  *  * *
-* *     * *   * *   * *** *  *  *  * * *      * ** *  * *    * * * * *
-* *     * *   * *   * ** *   * *** * * *     * **** * * ***  * ** ** *
-* *     * *   * *   * * * *  *  *  * * *     * *  * * * *    * * * * *
-*  **** * *   * *   * *  * *  *   *  *  **** * *  * * * **** * *  *  *
- ****** * *   * *   * *   * *  ***    ****** * *  * * ****** * *   * *
+ENTETE = "Enter help to know the supported commands"
 
-Citrocaen corp. with Ixchel Intelligent Systems partnership
-Boost Converter supervision module interface. Enter help to know the
-supported commands\
-"""
-
-INVITE = "boost:~# "
+INVITE = "superviseur$ "
 
 IP_REGEX = re.compile(r"^((((25[0-5]|2[0-4][0-9]|[10]?[0-9]{1,2})[.]){3}"
 "(25[0-5]|2[0-4][0-9]|[10]?[0-9]{1,2}))|(([0-9a-f]{0,2}:){5}[0-9a-f]{0,2}))$")
@@ -120,10 +108,10 @@ def cmdIp(args):
 def cmdList(args):
     listStr = "Boost\tCons\tVi\tIi\tPi\tVo\tIo\n"
     mmvf.seek(0)
-    while 1:
+    while True:
         line = mmvf.readline()
-        if (sys.version < "3" and line[0] in "#\n") or line[0] in (35, 10):
-            break
+        if line[0:1] == b"#":
+            continue
         listStr += line.decode("utf-8")
     return listStr[:-1]
 
@@ -163,7 +151,7 @@ def cmdPasswd(args):
     if proc.wait():
         return "Error: Failed to change password"
 
-    return "Netmask value is updated"
+    return "Password updated"
 
 # TODO !!!
 def cmdWifi(args):
