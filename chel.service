@@ -1,0 +1,9 @@
+[Unit]
+Description=Chel Supervisor
+After=syslog.target
+
+[Service]
+ExecStart=-/usr/bin/python /home/root/Chel/Chel.py
+
+[Install]
+WantedBy=multi-user.target

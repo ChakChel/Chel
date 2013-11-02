@@ -1,0 +1,13 @@
+[Unit]
+Description=Automatic WiFi configuration
+Requires=systemd-udevd.service
+Before=hostapd.service
+After=systemd-udevd.service
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/ifconfig wlan0 192.168.7.1 netmask 255.255.255.0
+ExecStart=/sbin/ifconfig wlan0 up
+
+[Install]
+WantedBy=multi-user.target

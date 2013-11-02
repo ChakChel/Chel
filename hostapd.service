@@ -1,0 +1,11 @@
+[Unit]
+Description=Access Point
+Requires=initWifi.service
+After=initWifi.service
+
+[Service]
+ExecStart=/usr/local/bin/hostapd -P /var/run/hostapd.pid /etc/hostapd.conf
+ExecStop=/bin/kill $MAINPID
+
+[Install]
+WantedBy=multi-user.target
