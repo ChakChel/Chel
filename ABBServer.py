@@ -4,8 +4,8 @@
 """
 @file    ABBServer.py
 @author  PERROCHAUD Clément
-@version 1.1
-@date    2013-11-01
+@version 1.3
+@date    2013-11-02
 
 Serveur répondant aux requêtes de l'interface Android/PC.
 """
@@ -28,7 +28,7 @@ HOST = ""
 
 PORT = 1234
 
-REQU_REGEX = re.compile(r"[0-9]{1,3}\t([0-9]{1,2})\n")
+REQU_REGEX = re.compile(r"([0-9]{1,3})\t(00?|18|24|30|36)\n")
 
 # MAIN #########################################################################
 
@@ -64,9 +64,12 @@ if __name__ == "__main__":
         if not m:
             continue
 
+        # Correction du format de la requête
+        request = "{0:03}\t{0:02}\n".format(int(m.group(1)), int(m.group(2)))
+
         # Transmission de la consigne à PBBMaster
-        if m.group(1) != "0":
-            print(request[:-1])
+        if request[4:6] != "00":
+            print(request, end="")
 
         # Assemblage de la réponse
         answer = b""
