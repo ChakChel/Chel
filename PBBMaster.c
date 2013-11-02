@@ -32,24 +32,47 @@
     //! Interval entre chaque salve de requêtes
     #define POLL_PERIOD 500000
 
+    //! Identifiant unique commun à tous les modules
+    #define IDENTIFIANT 0b110
+
+    //! Taille d'une trame
+    #define FRAME_SIZE  sizeof(struct can_frame)
+
 /*** FONCTIONS ****************************************************************/
 
+/***************************************************************************//**
+ * Formatte une trame CAN.
+ *
+ * @param nBoost    Le numéro du boost concerné
+ * @param requ      1 Pour une trame requête, 0 sinon
+ * @param data      Données à envoyer
+ * @param count     Taille des données, en octets
+ *
+ * @return          Trame formée
+ ******************************************************************************/
 struct can_frame mkFrame(int nBoost, char requ, char* data, size_t count) {
 
     struct can_frame frame;
     int i;
 
-    if (count > 8)
-        count = 8;
-
-    frame.can_id  = nBoost << 3;
-    frame.can_dlc = count;
+    frame.can_id  = IDENTIFIANT << 11 | (nBoost & 0xFF) << 3 | requ & 0x01 << 1;
+    frame.can_dlc = (count > 8)?8:count;
     for (i=0; i<count; i++)
         frame.data[i] = data[i];
 
     return frame;
 }
 
+/***************************************************************************//**
+ * Envoie une consigne
+ *
+ * @param fd        Le socket d'envoi
+ * @param nBoost    Le numéro du boost concerné
+ * @param consigne  Consigne à envoyer
+ *
+ * @return          0 en cas de réussite
+ *                  -1 en cas d'erreur à l'envoi
+ ******************************************************************************/
 int sendConsigne(int fd, int nBoost, char consigne) {
 
     struct can_frame frame;
@@ -58,15 +81,53 @@ int sendConsigne(int fd, int nBoost, char consigne) {
 
     printf("C%i/%i\n", nBoost, consigne);
 
-    if (write(fd, &frame, sizeof(struct can_frame)) != sizeof(char)) {
+    if (write(fd, &frame, FRAME_SIZE) != FRAME_SIZE) {
         perror("Failed to send consigne");
         return -1;
     }
 
-    
+    return 0;
+}
 
-    return 1;
-    //## return write(fd, &frame, sizeof(struct can_frame));
+/***************************************************************************//**
+ * Reçois un acquittement
+ *
+ * @param fd        Le socket d'envoi
+ * @param nBoost    Le numéro du boost concerné
+ * @param timeout   Temps maximal d'attente
+ *
+ * @return          1 en cas de réussite
+ *                  0 en cas de timeout
+ *                  -1 en cas d'erreur de lecture
+ *                  -2 en cas d'erreur de sélection
+ ******************************************************************************/
+int getAck(int fd, int nBoost, useconds_t timeout) {
+
+    struct can_frame frame;
+    fd_set set;
+    struct timeval delay;
+
+    FD_ZERO(&set);
+    FD_SET(fd, &set);
+
+    timeout.tv_sec = 0;
+    timeout.tv_usec = timeout;
+
+    rv = select(fd + 1, &set, NULL, NULL, &timeout);
+
+    if(rv == -1) {
+        perror("Failed to select ACK");
+        return -2;
+    } else if(rv == 0) {
+        return 0;
+    }
+
+    if (read(s, &frame, FRAME_SIZE) != FRAME_SIZE) {
+        perror("Failed to read ACK");
+        return -1;
+    }
+
+    // if (frame.can_id //TODO
 }
 
 /*** MAIN *********************************************************************/
@@ -78,7 +139,7 @@ int main(void) {
     struct ifreq ifr;
     int flags;
     char strConsigne[7];
-    ssize_t nRead;
+    int nBoost;
 
     //## // Ouverture du socket
     //## if((s = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
@@ -121,14 +182,17 @@ int main(void) {
                 strConsigne[3] = '\0';
                 strConsigne[6] = '\0';
 
+                nBoost = atoi(strConsigne);
+
                 // Envoi de la consigne
-                sendConsigne(s,                                 \
-                             atoi(strConsigne),                 \
-                             (char) (atoi(strConsigne+4) & 0xFF));
+                sendConsigne(s, nBoost, (char) (atoi(strConsigne+4) & 0xFF));
+
+                // Réception de l'acquittement
+                if (getAck(s, nBoost, 50000) == 0) {
+                    ; //TODO: Retirer module de la liste
+                }
             }
         }
-
-        //## nbytes = read(s, &frame, sizeof(struct can_frame));
 
         // Attente
         usleep(POLL_PERIOD);
