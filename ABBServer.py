@@ -19,6 +19,7 @@ from future.builtins import *
 import socket
 import mmap
 import re
+import sys
 
 # CONSTANTES ###################################################################
 
@@ -53,6 +54,8 @@ if __name__ == "__main__":
             request = conn.recv(8).decode("utf-8")
         except ConnectionResetError:
             request = ""
+        except UnicodeDecodeError:
+            continue
 
         # Déconnexion, attente d'un nouveau client
         if not request:
@@ -65,18 +68,21 @@ if __name__ == "__main__":
             continue
 
         # Correction du format de la requête
-        request = "{0:03}\t{0:02}\n".format(int(m.group(1)), int(m.group(2)))
+        request = "{0:03}\t{1:02}\n".format(int(m.group(1)), int(m.group(2)))
 
         # Transmission de la consigne à PBBMaster
         if request[4:6] != "00":
-            print(request, end="")
+            sys.stdout.write(request)
+            sys.stdout.flush()
 
         # Assemblage de la réponse
         answer = b""
         mmvf.seek(0)
         while True:
             line = mmvf.readline()
-            if line[0:1] == b"#":
+            if not line:
+                break
+            elif line[0:1] == b"#":
                 continue
             answer += line[:-1]+b":"
         answer += b"\n"

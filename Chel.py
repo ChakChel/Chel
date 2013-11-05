@@ -4,8 +4,8 @@
 """
 @file    Chel.py
 @author  PERROCHAUD Clément
-@version 1.0
-@date    2013-11-02
+@version 1.1
+@date    2013-11-03
 
 Programme principal du superviseur.
 """
@@ -43,7 +43,7 @@ PBBM_FILE = "PBBMaster"
 
 if __name__ == "__main__":
 
-    scriptDir = os.path.abspath(__file__)
+    scriptDir = os.path.dirname(os.path.abspath(__file__))
 
     # Création du fichier valeurs
     print("Populating value file...")
@@ -64,49 +64,53 @@ if __name__ == "__main__":
 
     # Démarrage de ABBServer
     print("Starting ABBServer...")
-    abbProc = sp.Popen([os.join(scriptDir, ABBS_FILE)],
+    abbProc = sp.Popen([os.path.join(scriptDir, ABBS_FILE)],
                stdin=sp.PIPE,
                stdout=sp.PIPE,
                stderr=sys.stderr)
 
     # Démarrage de PBBMaster
     print("Starting PBBMaster...")
-    pbbProc = sp.Popen([os.join(scriptDir, PBBM_FILE)],
+    pbbProc = sp.Popen([os.path.join(scriptDir, PBBM_FILE)],
                stdin=abbProc.stdout,
-               stdout=sys.stdin,
+               stdout=sp.PIPE,
                stderr=sys.stderr)
+
+    # Détachement du pipe ABB -> PBB
+    abbProc.stdout.close()
 
     print("Entering main loop...")
     while True:
 
         # Lecture des mesures
         try:
-            mesures = [ int(x) for x in input().split("\t") ]
+            mesures = pbbProc.stdout.readline().split("\t")
         except EOFError:
             break
 
-        # Liste des mesures lues :
-        #   mesures[0] = Nboost
-        #   mesures[1] = Consigne
-        #   mesures[2] = Vi
-        #   mesures[3] = Vil
-        #   mesures[4] = Vo
-
-        # Navigation dans le fichier valeurs
-        mmvf.seek(mesures[0]*41)
+        if mesures[0] == "":
+            continue
 
         # Calcul des valeurs
-        ii = (mesures[3] - mesures[2])/0.055
-        pi = mesures[2]*ii
-        io = pi/mesures[4]
+        nBoost = int(mesures[0])
+        cons = int(mesures[1])
+        vi = float(mesures[2])
+        vil = float(mesures[3])
+        ii = (vil - vi)/0.055
+        pi = vi*ii
+        vo = float(mesures[4])
+        io = pi/vo
+
+        # Navigation dans le fichier valeurs
+        mmvf.seek(nBoost*41)
 
         # Écriture des valeurs dans le fichier valeurs
-        mmvf.write(FORMAT_REPONSE_ABB.format(mesures[0],
-                                             mesures[1],
-                                             mesures[2],
+        mmvf.write(FORMAT_REPONSE_ABB.format(nBoost,
+                                             cons,
+                                             vi,
                                              ii,
                                              pi,
-                                             mesures[4],
+                                             vo,
                                              io).encode("utf-8"))
 
     # Fermeture du fichier valeurs

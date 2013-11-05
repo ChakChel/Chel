@@ -1,42 +1,13 @@
 /***************************************************************************//**
  * @file    PBBMaster.c
  * @author  PERROCHAUD Clément
- * @version 0.2
- * @date    2013-11-02
+ * @version 1.0
+ * @date    2013-11-04
  *
  * Superviseur du bus CAN
  ******************************************************************************/
 
-/*** INCLUDES *****************************************************************/
-
-    #include <stdio.h>
-    #include <stdlib.h>
-    #include <unistd.h>
-    #include <string.h>
-    #include <fcntl.h>
-     
-    #include <net/if.h>
-    #include <sys/types.h>
-    #include <sys/stat.h>
-    #include <sys/socket.h>
-    #include <sys/ioctl.h>
-     
-    #include <linux/can.h>
-    #include <linux/can/raw.h>
-
-/*** MACROS *******************************************************************/
-
-    //! Nombre maximal de modules boost
-    #define MAX_BOOST   256
-
-    //! Interval entre chaque salve de requêtes
-    #define POLL_PERIOD 500000
-
-    //! Identifiant unique commun à tous les modules
-    #define IDENTIFIANT 0b110
-
-    //! Taille d'une trame
-    #define FRAME_SIZE  sizeof(struct can_frame)
+#include "PBBMaster.h"
 
 /*** FONCTIONS ****************************************************************/
 
@@ -50,12 +21,16 @@
  *
  * @return          Trame formée
  ******************************************************************************/
-struct can_frame mkFrame(int nBoost, char requ, char* data, size_t count) {
+struct can_frame mkFrame(unsigned int id,       \
+                         unsigned char requ,    \
+                         char* data,            \
+                         size_t count) {
 
     struct can_frame frame;
     int i;
 
-    frame.can_id  = IDENTIFIANT << 11 | (nBoost & 0xFF) << 3 | requ & 0x01 << 1;
+    frame.can_id  = ((id & 0x07FF) << 3 |   \
+                     (requ & 0x01) << 1);
     frame.can_dlc = (count > 8)?8:count;
     for (i=0; i<count; i++)
         frame.data[i] = data[i];
@@ -73,13 +48,11 @@ struct can_frame mkFrame(int nBoost, char requ, char* data, size_t count) {
  * @return          0 en cas de réussite
  *                  -1 en cas d'erreur à l'envoi
  ******************************************************************************/
-int sendConsigne(int fd, int nBoost, char consigne) {
+int sendConsigne(int fd, unsigned char nBoost, char consigne) {
 
     struct can_frame frame;
 
-    frame = mkFrame(nBoost, 0, &consigne, sizeof(char));
-
-    printf("C%i/%i\n", nBoost, consigne);
+    frame = mkFrame(((IDENTIFIANT << 8) | nBoost), 0, &consigne, sizeof(char));
 
     if (write(fd, &frame, FRAME_SIZE) != FRAME_SIZE) {
         perror("Failed to send consigne");
@@ -90,7 +63,7 @@ int sendConsigne(int fd, int nBoost, char consigne) {
 }
 
 /***************************************************************************//**
- * Reçois un acquittement
+ * Reçoit un acquittement
  *
  * @param fd        Le socket d'envoi
  * @param nBoost    Le numéro du boost concerné
@@ -101,19 +74,20 @@ int sendConsigne(int fd, int nBoost, char consigne) {
  *                  -1 en cas d'erreur de lecture
  *                  -2 en cas d'erreur de sélection
  ******************************************************************************/
-int getAck(int fd, int nBoost, useconds_t timeout) {
+int getAck(int fd, unsigned char nBoost, useconds_t timeout) {
 
     struct can_frame frame;
     fd_set set;
     struct timeval delay;
+    int rv;
 
     FD_ZERO(&set);
     FD_SET(fd, &set);
 
-    timeout.tv_sec = 0;
-    timeout.tv_usec = timeout;
+    delay.tv_sec = 0;
+    delay.tv_usec = timeout;
 
-    rv = select(fd + 1, &set, NULL, NULL, &timeout);
+    rv = select(fd + 1, &set, NULL, NULL, &delay);
 
     if(rv == -1) {
         perror("Failed to select ACK");
@@ -122,12 +96,101 @@ int getAck(int fd, int nBoost, useconds_t timeout) {
         return 0;
     }
 
-    if (read(s, &frame, FRAME_SIZE) != FRAME_SIZE) {
+    if (read(fd, &frame, FRAME_SIZE) != FRAME_SIZE) {
         perror("Failed to read ACK");
         return -1;
     }
 
-    // if (frame.can_id //TODO
+    // Vérification de l'ID de l'expéditeur
+    if (((frame.can_id >> 3) & 0x7FF) == nBoost)
+        return 1;
+
+    // Chaque trame durant plus de 50ms, inutile d'en attendre une seconde
+    return 0;
+}
+
+int sendRequ(int fd, unsigned char nBoost) {
+
+    struct can_frame frame;
+
+    frame = mkFrame(((IDENTIFIANT << 8) | nBoost), 1, NULL, 0);
+
+    if (write(fd, &frame, FRAME_SIZE) != FRAME_SIZE) {
+        perror("Failed to send request");
+        return -1;
+    }
+
+    return 0;
+}
+int getMesures(int fd, unsigned char nBoost, useconds_t timeout) {
+
+    struct can_frame frame;
+    fd_set set;
+    struct timeval delay;
+    int rv;
+
+    FD_ZERO(&set);
+    FD_SET(fd, &set);
+
+    delay.tv_sec = 0;
+    delay.tv_usec = timeout;
+
+    rv = select(fd + 1, &set, NULL, NULL, &delay);
+
+    if(rv == -1) {
+        perror("Failed to select answer");
+        return -2;
+    } else if(rv == 0) {
+        return 0;
+    }
+
+    if (read(fd, &frame, FRAME_SIZE) != FRAME_SIZE) {
+        perror("Failed to read answer");
+        return -1;
+    }
+
+    // Vérification de l'ID de l'expéditeur
+    if (((frame.can_id >> 3) & 0x7FF) == nBoost && frame.can_dlc == 4) {
+
+        fprintf(stdout,             \
+                "%i\t%i\t%i\t%i\t%i\n", \
+                nBoost,
+                frame.data[0],      \
+                frame.data[1],      \
+                frame.data[2],      \
+                frame.data[3]);
+
+        fflush(stdout);
+
+        return 1;
+    }
+
+    // Je suis une feignasse
+    return 0;
+}
+int sendInvite(int fd, unsigned char nBoost) {
+
+    struct can_frame frame;
+    char data[2];
+
+    data[0] = IDENTIFIANT;
+    data[1] = nBoost;
+
+    frame = mkFrame(CODE_INVITE, 1, data, 2*sizeof(char));
+
+    if (write(fd, &frame, FRAME_SIZE) != FRAME_SIZE) {
+        perror("Failed to send invite");
+        return -1;
+    }
+
+    return 0;
+}
+void popModule(unsigned char nBoost) {
+    tabModules[nBoost] = 0;
+}
+
+void addModule(unsigned char nBoost) {
+    tabModules[nBoost] = 1;
 }
 
 /*** MAIN *********************************************************************/
@@ -139,27 +202,33 @@ int main(void) {
     struct ifreq ifr;
     int flags;
     char strConsigne[7];
-    int nBoost;
+    int nRead;
+    unsigned char nBoost;
+    unsigned char invite;
 
-    //## // Ouverture du socket
-    //## if((s = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
-        //## perror("Error while opening socket");
-        //## return -1;
-    //## }
-//## 
-    //## // Assignation du socket à l'interface can0
-    //## strcpy(ifr.ifr_name, "can0");
-    //## ioctl(s, SIOCGIFINDEX, &ifr);
-//## 
-    //## // Configuration du socket
-    //## addr.can_family  = AF_CAN;
-    //## addr.can_ifindex = ifr.ifr_ifindex;
-//## 
-    //## // Début de l'écoute
-    //## if(bind(s, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        //## perror("Error in socket bind");
-        //## return -2;
-    //## }
+    // Initialisation du tableau des modules
+    for (nBoost=0; nBoost<MAX_BOOSTS; nBoost++)
+        tabModules[nBoost] = 0;
+
+    // Ouverture du socket
+    if((s = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
+        perror("Error while opening socket");
+        return -1;
+    }
+
+    // Assignation du socket à l'interface can0
+    strcpy(ifr.ifr_name, "can0");
+    ioctl(s, SIOCGIFINDEX, &ifr);
+
+    // Configuration du socket
+    addr.can_family  = AF_CAN;
+    addr.can_ifindex = ifr.ifr_ifindex;
+
+    // Début de l'écoute
+    if(bind(s, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        perror("Error in socket bind");
+        return -2;
+    }
 
     // Configuration de stdin en mode non-bloquant
     flags = fcntl(fileno(stdin), F_GETFL, 0);
@@ -182,14 +251,32 @@ int main(void) {
                 strConsigne[3] = '\0';
                 strConsigne[6] = '\0';
 
-                nBoost = atoi(strConsigne);
+                nBoost = (unsigned char)(atoi(strConsigne) & 0xFF);
 
                 // Envoi de la consigne
-                sendConsigne(s, nBoost, (char) (atoi(strConsigne+4) & 0xFF));
+                sendConsigne(s,         \
+                             nBoost,    \
+                             (unsigned char) (atoi(strConsigne+4) & 0xFF));
 
                 // Réception de l'acquittement
-                if (getAck(s, nBoost, 50000) == 0) {
-                    ; //TODO: Retirer module de la liste
+                if (getAck(s, nBoost, ACK_TIMEOUT) == 0)
+                    popModule(nBoost);
+            }
+        }
+
+        // Envoi des requêtes
+        invite = 0;
+        for (nBoost=0; nBoost<MAX_BOOSTS; nBoost++) {
+            if (tabModules[nBoost] == 1) {  // Relevé des mesures
+                sendRequ(s, nBoost);
+                if (getAck(s, nBoost, ACK_TIMEOUT) == 0 ||  \
+                    getMesures(s, nBoost, ANS_TIMEOUT) == 0)
+                    popModule(nBoost);
+            } else if (invite == 0) {       // Invite P&P
+                sendInvite(s, nBoost);
+                if (getAck(s, nBoost, ACK_TIMEOUT) == 1) {
+                    addModule(nBoost);
+                    invite = 1;
                 }
             }
         }

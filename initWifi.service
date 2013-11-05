@@ -8,6 +8,7 @@ After=systemd-udevd.service
 Type=oneshot
 ExecStart=/sbin/ifconfig wlan0 192.168.7.1 netmask 255.255.255.0
 ExecStart=/sbin/ifconfig wlan0 up
+ExecStop=/sbin/ifconfig wlan0 down
 
 [Install]
 WantedBy=multi-user.target

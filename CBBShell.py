@@ -4,8 +4,8 @@
 """
 @file    CBBShell.py
 @author  PERROCHAUD Clément
-@version 1.2
-@date    2013-11-01
+@version 1.5
+@date    2013-11-05
 
 Shell de configuration du superviseur.
 """
@@ -32,9 +32,13 @@ IP_REGEX = re.compile(r"^((((25[0-5]|2[0-4][0-9]|[10]?[0-9]{1,2})[.]){3}"
 
 VALUES_FILE = "/tmp/values.chel"
 
+HOSTAPD_CONFIG = "/etc/hostapd.conf"
+
 # GLOBALES #####################################################################
 
 cmdDict = {}
+
+mmvf = None
 
 # CLASSES ######################################################################
 
@@ -50,6 +54,30 @@ class Commande:
         return self.desc
 
 # FONCTIONS ####################################################################
+
+def hostapdConfig(parameter, value):
+
+    hapdConf = open(HOSTAPD_CONFIG, "r")
+    configLines = hapdConf.readlines()
+    hapdConf.close()
+
+    for i, line in enumerate(configLines):
+        configLines[i] = re.sub(r"{}=.*\n".format(parameter),
+                                "{}={}\n".format(parameter, value),
+                                line)
+
+    hapdConf = open(HOSTAPD_CONFIG, "w")
+    hapdConf.writelines(configLines)
+    hapdConf.close()
+
+def cmdChannel(args):
+    
+    if len(args) < 2:
+        return "Error: No value given"
+
+    hostapdConfig("channel", args[1])
+
+    return "Channel updated"
 
 def cmdConfig(args):
 
@@ -110,6 +138,8 @@ def cmdList(args):
     mmvf.seek(0)
     while True:
         line = mmvf.readline()
+        if not line:
+            break
         if line[0:1] == b"#":
             continue
         listStr += line.decode("utf-8")
@@ -135,9 +165,12 @@ def cmdNetmask(args):
     return "Netmask value is updated"
 
 def cmdPasswd(args):
-    
+
     if len(args) < 2:
         return "Error: No password given"
+
+    if len(args[1]) < 8:
+        return "Error: Password too short"
 
     proc = sp.Popen(["/usr/bin/sudo",
                      "/usr/bin/passwd",
@@ -151,25 +184,39 @@ def cmdPasswd(args):
     if proc.wait():
         return "Error: Failed to change password"
 
+    hostapdConfig("wpa_passphrase", args[1])
+
     return "Password updated"
 
-# TODO !!!
+def cmdSsid(args):
+    
+    if len(args) < 2:
+        return "Error: No value given"
+
+    hostapdConfig("ssid", args[1])
+
+    return "SSID updated"
+
 def cmdWifi(args):
 
-    return "Not yet implemented"
+    if len(args) < 2:
+        return "Error: No command given"
 
-#    command = ["/sbin/iwconfig", "wlan0", "mode", "Ad-Hoc", "essid", "Chel"]
-#    proc = sp.Popen(["/usr/bin/sudo",
-#                     "/sbin/ifconfig",
-#                     "wlan0"],
-#                    stdin=sp.PIPE,
-#                    stdout=sp.PIPE,
-#                    stderr=sp.STDOUT)
-#
-#    if proc.wait():
-#        return "Error: Failed to enter WiFi Mode"
-#    
-#    return "WiFi is now enabled"
+    if args[1] not in ("start", "stop", "restart"):
+        return "Error: Invalid command"
+
+    for service in ("hostapd", "initWifi", "udhcpd"):
+        proc = sp.Popen(["/usr/bin/sudo",
+                         "/bin/systemctl",
+                         args[1],
+                         service],
+                        stdin=sp.PIPE,
+                        stdout=sp.PIPE,
+                        stderr=sp.STDOUT)
+        if proc.wait():
+            return "Error: Failed to change WiFi status"
+    
+    return "WiFi status updated"
 
 # MAIN #########################################################################
 
@@ -191,15 +238,21 @@ if __name__ == "__main__":
                "passwd": Commande(cmdPasswd,
                                   "Update WiFi and SSH passwords"),
                "wifi": Commande(cmdWifi,
-                                "Start/Stop WiFi access point")}
-    try:
-        while 1:
+                                "Start/Stop/Restart WiFi access point"),
+               "channel": Commande(cmdChannel,
+                                   "Update WiFi channel"),
+               "ssid": Commande(cmdSsid,
+                                "Update WiFi SSID")}
+    while True:
+        try:
             cmd = input(INVITE).split(" ")
-            if cmd[0] in cmdDict.keys():
-                print(cmdDict[cmd[0]].action(cmd))
-            elif len(cmd[0]):
-                print("Error: Enter help to know the supported commands")
-    except EOFError:
-        print("\nInterrupted, exiting...")
+        except EOFError:
+            break
+        if cmd[0] in cmdDict.keys():
+            print(cmdDict[cmd[0]].action(cmd))
+        elif len(cmd[0]):
+            print("Error: Enter help to know the supported commands")
+
+    print("\nInterrupted, exiting...")
     mmvf.close()
     vf.close()
